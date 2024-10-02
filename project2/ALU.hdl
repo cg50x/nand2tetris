@@ -1,0 +1,66 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/2/ALU.hdl
+/**
+ * ALU (Arithmetic Logic Unit):
+ * Computes out = one of the following functions:
+ *                0, 1, -1,
+ *                x, y, !x, !y, -x, -y,
+ *                x + 1, y + 1, x - 1, y - 1,
+ *                x + y, x - y, y - x,
+ *                x & y, x | y
+ * on the 16-bit inputs x, y,
+ * according to the input bits zx, nx, zy, ny, f, no.
+ * In addition, computes the two output bits:
+ * if (out == 0) zr = 1, else zr = 0
+ * if (out < 0)  ng = 1, else ng = 0
+ */
+// Implementation: Manipulates the x and y inputs
+// and operates on the resulting values, as follows:
+// if (zx == 1) sets x = 0        // 16-bit constant
+// if (nx == 1) sets x = !x       // bitwise not
+// if (zy == 1) sets y = 0        // 16-bit constant
+// if (ny == 1) sets y = !y       // bitwise not
+// if (f == 1)  sets out = x + y  // integer 2's complement addition
+// if (f == 0)  sets out = x & y  // bitwise and
+// if (no == 1) sets out = !out   // bitwise not
+
+CHIP ALU {
+    IN  
+        x[16], y[16],  // 16-bit inputs        
+        zx, // zero the x input?
+        nx, // negate the x input?
+        zy, // zero the y input?
+        ny, // negate the y input?
+        f,  // compute (out = x + y) or (out = x & y)?
+        no; // negate the out output?
+    OUT 
+        out[16], // 16-bit output
+        zr,      // if (out == 0) equals 1, else 0
+        ng;      // if (out < 0)  equals 1, else 0
+
+    PARTS:
+    // process the x input to get xProcessed
+    Mux16(a=x, b=false, sel=zx, out=zxResult);
+    Not16(in=zxResult, out=zxNotResult);
+    Mux16(a=zxResult , b=zxNotResult, sel=nx, out=xProcessed);
+    // process the y input
+    Mux16(a=y, b=false, sel=zy, out=zyResult);
+    Not16(in=zyResult, out=zyNotResult);
+    Mux16(a=zyResult , b=zyNotResult, sel=ny, out=yProcessed);
+    // Calculate the & or + results at the same time
+    Add16(a=xProcessed, b = yProcessed, out = xPlusY);
+    And16(a=xProcessed, b = yProcessed, out = xAndY);
+    // Use a mux to determine which result to output
+    Mux16(a=xAndY, b=xPlusY, sel=f, out=fResult);
+    // Use a mux to determine whether to negate the output
+    Not16(in=fResult, out=fNotResult);
+    Mux16(a=fResult, b=fNotResult, sel=no, out=out, out[0..7]=outFirst8, out[8..15]=outLast8, out[15]=ng);
+    // zr Return the negation of two 8 way ORs
+    Or8Way(in=outFirst8 , out=first8HasOne);
+    Not(in=first8HasOne, out=first8IsZero);
+    Or8Way(in=outLast8 , out=last8HasOne);
+    Not(in=last8HasOne, out=last8IsZero);
+    And(a=first8IsZero , b=last8IsZero, out=zr);
+}

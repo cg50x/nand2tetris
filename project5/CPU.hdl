@@ -1,0 +1,133 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/5/CPU.hdl
+/**
+ * The Hack Central Processing unit (CPU).
+ * Parses the binary code in the instruction input and executes it according to the
+ * Hack machine language specification. In the case of a C-instruction, computes the
+ * function specified by the instruction. If the instruction specifies to read a memory
+ * value, the inM input is expected to contain this value. If the instruction specifies
+ * to write a value to the memory, sets the outM output to this value, sets the addressM
+ * output to the target address, and asserts the writeM output (when writeM = 0, any
+ * value may appear in outM).
+ * If the reset input is 0, computes the address of the next instruction and sets the
+ * pc output to that value. If the reset input is 1, sets pc to 0.
+ * Note: The outM and writeM outputs are combinational: they are affected by the
+ * instruction's execution during the current cycle. The addressM and pc outputs are
+ * clocked: although they are affected by the instruction's execution, they commit to
+ * their new values only in the next cycle.
+ */
+CHIP CPU {
+
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current
+                         // program (reset==1) or continue executing
+                         // the current program (reset==0).
+
+    OUT outM[16],        // M value output
+        writeM,          // Write to M? 
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // address of next instruction
+
+    PARTS:
+    /*
+        Instruction Handling logic (Unit 5.3 8:50)
+        Parts:
+        - A-register
+        - Mux16 behind the A-register
+
+        For all instructions:
+        opcode = instruction[15]
+        - 0 = A instruction
+        - 1 = C instruction
+
+        Mux16 chooses between:
+        - 0 - ALU output (for C-instructions)
+        - 1 - instruction (for A-instructions)
+
+        A-register load bit is 1 when instruction is:
+        - an A-instruction
+        - a C-instruction with A destination bit (5) set to 1
+
+        For A instructions:
+        value/address = instruction[0..14]
+
+        A-register output is connected directly addressM
+        regardless of instruction type. This is OK to do
+        because memory will only be affected if writeM is 1.
+    */
+    Not(in=instruction[15], out=isAInstruction);
+    Mux16(a=aluOut, b=instruction, sel=isAInstruction, out=instructionMuxOut);
+    And(a=instruction[15], b=instruction[5], out=isCInstructionWithADest);
+    Or(a=isAInstruction, b=isCInstructionWithADest, out=shouldLoadARegister);
+    ARegister(in=instructionMuxOut, load=shouldLoadARegister, out=aRegisterOut, out[0..14]=addressM);
+
+    /*
+        ALU Operation (Unit 5.3 13:13)
+        Parts:
+        - Mux16 that chooses between inM and the A-register output
+        - D-register
+        - ALU
+
+        For C instructions:
+        a = instruction[12] whether to use A register or M input
+        comp = instruction[6..11]
+        dest = instruction[3..5] MDA
+            - instruction[3] = load Memory
+            - instruction[4] = load D register
+            - instruction[5] = load A register
+        jump = instruction[0..2]
+    */
+    Mux16(a=aRegisterOut, b=inM, sel=instruction[12], out=aAndMMuxOut);
+    And(a=instruction[15], b=instruction[4], out=isCInstructionWithDDest);
+    DRegister(in=aluOut, load=isCInstructionWithDDest, out=dRegisterOut);
+    ALU(
+        x=dRegisterOut,
+        y=aAndMMuxOut,
+        zx=instruction[11],
+        nx=instruction[10],
+        zy=instruction[9],
+        ny=instruction[8],
+        f=instruction[7],
+        no=instruction[6],
+        out=outM,
+        out=aluOut,
+        zr=zrOutput,
+        ng=ngOutput
+    );
+    // if C-instruction (15) and dest M, then writeM
+    And(a=instruction[15], b=instruction[3], out=writeM);
+
+    /*
+        Program Control (Unit 5.3 18:20)
+        Parts:
+        - PC
+
+        For C-instructions, the jump bits are:
+        - instruction[2] = out < 0
+        - instruction[1] = out == 0
+        - instruction[0] = out > 0
+
+        Only set the PC load bit when instruction is a C-instruction
+        and one of these jump conditions are met:
+        - (instruction[2] AND ngOutput)
+        - OR (instruction[1] AND zrOutput)
+        - OR (instruction[0] AND !ngOutput AND !zrOutput)
+        - OR (instruction[0] AND instruction[1] AND instruction[2])
+    */
+    And(a=instruction[2], b=ngOutput, out=isNegativeJump);
+    And(a=instruction[1], b=zrOutput, out=isZeroJump);
+    Not(in=ngOutput, out=notNgOutput);
+    Not(in=zrOutput, out=notZrOutput);
+    And(a=notNgOutput, b=notZrOutput, out=isPositive);
+    And(a=instruction[0], b=isPositive, out=isPositiveJump);
+    And(a=instruction[0], b=instruction[1], out=isJLE);
+    And(a=isJLE, b=instruction[2], out=isUnconditionalJump);
+    Or(a=isNegativeJump, b=isZeroJump, out=isNegativeOrZeroJump);
+    Or(a=isNegativeOrZeroJump, b=isPositiveJump, out=isNegativeZeroPositiveJump);
+    Or(a=isNegativeZeroPositiveJump, b=isUnconditionalJump, out=jumpConditionsMet);
+    And(a=instruction[15], b=jumpConditionsMet, out=shouldJump);
+    PC(in=aRegisterOut, load=shouldJump, inc=true, reset=reset, out[0..14]=pc);
+}
