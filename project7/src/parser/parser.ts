@@ -17,6 +17,11 @@ export class Parser {
   }
   private constructor() {}
 
+  /**
+   * Checks if advance can be called.
+   * If hasMoreCommands
+   * @returns 
+   */
   public async hasMoreCommands(): Promise<boolean> {
     if (!this.streamReader) {
       throw new Error("Reader not initialized");

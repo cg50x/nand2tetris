@@ -3,6 +3,7 @@ import { Parser } from "./parser/parser";
 import { CodeWriter } from "./code-writer/code-writer";
 import { isArithmeticCommand } from "./parser/arithmetic-command";
 import { isMemorySegment } from "./parser/memory-segment";
+import { basename } from "path";
 
 /*
   ============================================================================
@@ -13,6 +14,8 @@ import { isMemorySegment } from "./parser/memory-segment";
 async function compile(src: BunFile, dest: BunFile) {
   const parser = await Parser.create(src);
   const codeWriter = await CodeWriter.create(dest);
+  const srcFileName = basename(src.name ?? "Xxx", ".vm");
+  codeWriter.setFileName(srcFileName);
   while (await parser.hasMoreCommands()) {
     await parser.advance();
   

@@ -5,8 +5,9 @@
 */
 
 import type { MemorySegment } from "../parser/memory-segment";
+import type { WriterContext } from "./writer-context";
 
-type PushPopArgs = {
+type PushPopArgs = WriterContext & {
   /** memory segment index */
   i: number
 };
@@ -76,7 +77,7 @@ ${pushSegment("ARG", i)}
 `;
 
 // pop argument i
-const writePopArgument = ({i}: {i: number}) =>
+const writePopArgument = ({i}: PushPopArgs) =>
 `//// pop argument ${i}
 ${popSegment("ARG", i)}
 `;
@@ -106,10 +107,10 @@ ${popSegment("THAT", i)}
 `;
 
 // push static i
-const writePushStatic = ({i}: PushPopArgs) =>
+const writePushStatic = ({i, vmFileName}: PushPopArgs) =>
 `//// push static ${i}
-// RAM[SP] = Foo.${i}
-@Foo.${i}
+// RAM[SP] = ${vmFileName}.${i}
+@${vmFileName}.${i}
 D=M
 @SP
 A=M
@@ -119,14 +120,14 @@ M=D
 M=M+1
 `
 // pop static i
-const writePopStatic = ({i}: PushPopArgs) =>
+const writePopStatic = ({i, vmFileName}: PushPopArgs) =>
 `//// pop static ${i}
 // SP--
 @SP
 AM=M-1
-// Foo.${i} = RAM[SP]
+// ${vmFileName}.${i} = RAM[SP]
 D=M
-@Foo.${i}
+@${vmFileName}.${i}
 M=D
 `;
 
@@ -213,48 +214,56 @@ A=M
 M=D
 `;
 
-const writePush = (segment: MemorySegment, index: number) => {
+const writePush = (segment: MemorySegment, index: number, context: WriterContext) => {
+  const args = {
+    ...context,
+    i: index
+  };
   let translation;
   if (segment === "argument") {
-    translation = writePushArgument({ i: index });
+    translation = writePushArgument(args);
   } else if (segment === "constant") {
-    translation = writePushConstant({ i: index });
+    translation = writePushConstant(args);
   } else if (segment === "local") {
-    translation = writePushLocal({ i: index });
+    translation = writePushLocal(args);
   } else if (segment === "pointer" && index === 0) {
     translation = writePushPointer0();
   } else if (segment === "pointer" && index === 1) {
     translation = writePushPointer1();
   } else if (segment === "static") {
-    translation = writePushStatic({ i: index });
+    translation = writePushStatic(args);
   } else if (segment === "temp") {
-    translation = writePushTemp({ i: index });
+    translation = writePushTemp(args);
   } else if (segment === "that") {
-    translation = writePushThat({ i: index });
+    translation = writePushThat(args);
   } else if (segment === "this") {
-    translation = writePushThis({ i: index });
+    translation = writePushThis(args);
   }
   return translation;
 };
 
-const writePop = (segment: MemorySegment, index: number) => {
+const writePop = (segment: MemorySegment, index: number, context: WriterContext) => {
+  const args = {
+    ...context,
+    i: index
+  }
   let translation;
   if (segment === "argument") {
-    translation =  writePopArgument({ i: index });
+    translation =  writePopArgument(args);
   } else if (segment === "local") {
-    translation = writePopLocal({ i: index });
+    translation = writePopLocal(args);
   } else if (segment === "pointer" && index === 0) {
     translation = writePopPointer0();
   } else if (segment === "pointer" && index === 1) { 
       translation = writePopPointer1();
   } else if (segment === "static") {
-    translation = writePopStatic({ i: index });
+    translation = writePopStatic(args);
   } else if (segment === "temp") {
-    translation = writePopTemp({ i: index });
+    translation = writePopTemp(args);
   } else if (segment === "that") {
-    translation = writePopThat({ i: index });
+    translation = writePopThat(args);
   } else if (segment === "this") {
-    translation = writePopThis({ i: index });
+    translation = writePopThis(args);
   }
   return translation;
 };
@@ -262,13 +271,14 @@ const writePop = (segment: MemorySegment, index: number) => {
 export const writePushPop = (
   command: "C_PUSH" | "C_POP",
   segment: MemorySegment,
-  index: number
+  index: number,
+  context: WriterContext
 ): string | undefined => {
   let translation;
   if (command === "C_POP") {
-    translation = writePop(segment, index);
+    translation = writePop(segment, index, context);
   } else if (command === "C_PUSH") {
-    translation = writePush(segment, index);
+    translation = writePush(segment, index, context);
   }
   return translation;
 }
