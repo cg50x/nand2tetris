@@ -24,7 +24,7 @@ export class CodeWriter {
   protected currentFileName: string = "Xxx"; // TODO Find a good default
 
   /** Cannot be instantiated with new. */
-  private constructor() {}
+  protected constructor() {}
 
   /** Sets the current .vm file being processed */
   public setFileName(newFileName: string): void {
