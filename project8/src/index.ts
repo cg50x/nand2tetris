@@ -1,6 +1,5 @@
 import { Parser } from "../../project7/src/parser/parser";
 import { CodeWriterProject8 } from "./code-writer/code-writer";
-import type { BunFile } from "bun";
 import { basename, extname } from "path";
 import { isArithmeticCommand } from "../../project7/src/parser/arithmetic-command";
 import { isMemorySegment } from "../../project7/src/parser/memory-segment";
@@ -20,43 +19,43 @@ async function translateSingleFile(parser: Parser, codeWriter: CodeWriterProject
     if (commandType === "C_ARITHMETIC") {
       const arg1 = parser.arg1();
       if (arg1 && isArithmeticCommand(arg1)) {
-        codeWriter.writeArithmetic(arg1);
+        await codeWriter.writeArithmetic(arg1);
       }
     } else if (commandType === "C_PUSH" || commandType === "C_POP") {
       const arg1 = parser.arg1();
       const arg2 = parser.arg2();
       if (arg1 && isMemorySegment(arg1) && typeof arg2 !== 'undefined') {
-        codeWriter.writePushPop(commandType, arg1, arg2);
+        await codeWriter.writePushPop(commandType, arg1, arg2);
       }
     } else if (commandType === 'C_LABEL') {
       const arg1 = parser.arg1();
       if (arg1) {
-        codeWriter.writeLabel(arg1);
+        await codeWriter.writeLabel(arg1);
       }
     } else if (commandType === 'C_GOTO') {
       const arg1 = parser.arg1();
-      if (arg1) {
-        codeWriter.writeGoto(arg1);
+      if (typeof arg1 !== "undefined") {
+        await codeWriter.writeGoto(arg1);
       }
     } else if (commandType === 'C_IF') {
       const arg1 = parser.arg1();
       if (arg1) {
-        codeWriter.writeIf(arg1);
+        await codeWriter.writeIf(arg1);
       }
     } else if (commandType === 'C_CALL') {
       const arg1 = parser.arg1();
       const arg2 = parser.arg2();
-      if (arg1 && !!arg2 && !Number.isNaN(arg2)) {
-        codeWriter.writeCall(arg1, arg2);
+      if (arg1 && typeof arg2 === "number" && !Number.isNaN(arg2)) {
+        await codeWriter.writeCall(arg1, arg2);
       }
     } else if (commandType === 'C_FUNCTION') {
       const arg1 = parser.arg1();
       const arg2 = parser.arg2();
       if (arg1 && typeof arg2 === "number" && !Number.isNaN(arg2)) {
-        codeWriter.writeFunction(arg1, arg2);
+        await codeWriter.writeFunction(arg1, arg2);
       }
     } else if (commandType === 'C_RETURN') {
-      codeWriter.writeReturn();
+      await codeWriter.writeReturn();
     }
   }
 }
@@ -73,7 +72,9 @@ async function processSingleFile(filepath: string): Promise<string> {
   // Notifying the code writer of the name of the file being parsed
   codeWriter.setFileName(srcFileName);
   // Translating single file .vm to .asm
+  console.write("Translating vm file...");
   await translateSingleFile(parser, codeWriter);
+  console.log("DONE");
   // Closing the code writer since the process is done
   codeWriter.close();
   return outputFile.name ?? "";
@@ -84,11 +85,6 @@ async function processDirectory(dirpath: string): Promise<string> {
   const vmFiles = files.filter(file => extname(file) === ".vm");
   if (vmFiles.length === 0) {
     throw new Error(`No .vm files found in ${dirpath}`);
-  } else {
-    console.log("Found .vm files:");
-    vmFiles.forEach((file) => {
-      console.log(`  - ${file}`);
-    });
   }
   // Determining output asm file
   const outputFileName = basename(dirpath ?? "Xxx");
@@ -96,7 +92,7 @@ async function processDirectory(dirpath: string): Promise<string> {
   // Initializing code writer for the output file
   const codeWriter = await CodeWriterProject8.create(outputFile);
   // Writing the bootstrap code first
-  codeWriter.writeBootstrap();
+  await codeWriter.writeBootstrap();
   console.log("Translating vm files...");
   const errors = [];
   for (const file of vmFiles) {
@@ -125,10 +121,9 @@ async function processDirectory(dirpath: string): Promise<string> {
 }
 
 
-// TODO Take file
+// TODO Take from CLI arg
 const outputDir = './output';
 
-// console.log("Finished translating all VM files in tests folder");
 const firstArg = process.argv[2];
 try {
   const stats = fs.statSync(firstArg);

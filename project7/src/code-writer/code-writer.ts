@@ -1,4 +1,5 @@
 import type { BunFile, FileSink } from "bun";
+import { write } from "bun";
 import type { ArithmeticCommand } from "../parser/arithmetic-command";
 import type { MemorySegment } from "../parser/memory-segment";
 import { writeArithmetic } from "./arithmetic-writer";
@@ -35,7 +36,7 @@ export class CodeWriter {
     }
   }
 
-  public writeArithmetic(command: ArithmeticCommand): void {
+  public async writeArithmetic(command: ArithmeticCommand) {
     // Build the context
     let context: WriterContext = {
       vmFileName: this.currentFileName,
@@ -50,25 +51,21 @@ export class CodeWriter {
     }
     // Pass the context to the writer
     const translation = writeArithmetic(command, context);
-    if (translation) {
-      this.fileWriter?.write(translation);
-    }
+    await this.writeToFile(translation);
   }
 
-  public writePushPop(
+  public async writePushPop(
     command: "C_PUSH" | "C_POP",
     segment: MemorySegment,
     index: number
-  ): void {
+  ) {
     // Build the context
     let context: WriterContext = {
       vmFileName: this.currentFileName,
       uniqueIdSuffix: ''
     };
     const translation = writePushPop(command, segment, index, context);
-    if (translation) {
-      this.fileWriter?.write(translation);
-    }
+    await this.writeToFile(translation);
   }
   public close() {
     this.fileWriter?.end();
@@ -93,5 +90,24 @@ export class CodeWriter {
     this.nextEqId = 0;
     this.nextGtId = 0;
     this.nextLtId = 0;
+  }
+
+  protected codeLinesWritten = 0;
+  protected shouldPrintLineNumbers = true;
+  protected async writeToFile(translation: string | undefined) {
+    if (translation) {
+      let processedTranslation = translation;
+      if (this.shouldPrintLineNumbers) {
+        processedTranslation = translation.split('\n').map((line) => {
+          // Line is actual code and not just a comment or empty line
+          if (line.trim().length > 0 && !line.startsWith("(") && !line.startsWith("//")) {
+            return `${line}\t\t\t\t\t\t\t\t// line ${this.codeLinesWritten++}`;
+          } else {
+            return line;
+          }
+        }).join('\n');
+      }
+      this.fileWriter?.write(processedTranslation);
+    }
   }
 }

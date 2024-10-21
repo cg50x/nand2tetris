@@ -48,7 +48,12 @@ export class Parser {
 
     // Collecting the lines except for the last chunk
     let lines = this.buffer.split(/\r?\n/);
-    this.buffer = lines.pop() ?? "";
+    if (lines.length > 1) {
+      this.buffer = lines.pop() ?? "";
+    } else {
+      // Make sure buffer is emptied
+      this.buffer = "";
+    }
     // Ignore all whitespace and comments
     lines = lines
       .map((line) => line.replace(/\/\/.*/, "").trim())

@@ -11,20 +11,20 @@ export class CodeWriterProject8 extends CodeWriter {
     newCodeWriter.fileWriter = file.writer();
     return newCodeWriter;
   }
-  public writeLabel(label: string) {
+  public async writeLabel(label: string) {
     const context = this.buildContext();
     const translation = writeLabel(label, context);
-    this.writeToFile(translation);
+    await this.writeToFile(translation);
   }
-  public writeGoto(label: string) {
+  public async writeGoto(label: string) {
     const context = this.buildContext();
     const translation = writeGoto(label, context);
-    this.writeToFile(translation);
+    await this.writeToFile(translation);
   }
-  public writeIf(label: string) {
+  public async writeIf(label: string) {
     const context = this.buildContext();
     const translation = writeIf(label, context);
-    this.writeToFile(translation);
+    await this.writeToFile(translation);
   }
 
   /**
@@ -33,13 +33,13 @@ export class CodeWriterProject8 extends CodeWriter {
    */
   protected callSiteIds = new Map<string, number>();
 
-  public writeFunction(functionName: string, nVars: number) {
+  public async writeFunction(functionName: string, nVars: number) {
     const context = this.buildContext();
     const translation = writeFunction(functionName, nVars, context);
-    this.writeToFile(translation);
+    await this.writeToFile(translation);
   }
 
-  public writeCall(functionName: string, nArgs: number) {
+  public async writeCall(functionName: string, nArgs: number) {
     // Building the context
     const context = this.buildContext();
     // Calculating the call ID suffix for this function
@@ -51,22 +51,22 @@ export class CodeWriterProject8 extends CodeWriter {
     context.uniqueIdSuffix = `${callSiteId}`;
     // Translating
     const translation = writeCall(functionName, nArgs, context);
-    this.writeToFile(translation);
+    await this.writeToFile(translation);
   }
 
-  public writeReturn() {
+  public async writeReturn() {
     // No context needed, just translate
     const translation = writeReturn();
-    this.writeToFile(translation);
+    await this.writeToFile(translation);
   }
 
-  public writeBootstrap() {
+  public async writeBootstrap() {
     // Building the context
     const context = this.buildContext();
     // Sys.init is only expected to be called once so it is hardcoded to 0
     context.uniqueIdSuffix = "0";
     // Translating
     const translation = writeBootstrap(context);
-    this.writeToFile(translation);
+    await this.writeToFile(translation);
   }
 }
