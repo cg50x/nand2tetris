@@ -82,7 +82,7 @@ export class Parser {
 
   private parseCommand(commandInput?: string): ParsedCommand | undefined {
     // Find a parser that can parse the given string
-    return [
+    const answer = [
       this.parseArithmeticCommand,
       this.parsePopCommand,
       this.parsePushCommand,
@@ -96,6 +96,7 @@ export class Parser {
       (parsedCommand, parser) => parsedCommand ?? parser(commandInput),
       undefined
     );
+    return answer;
   }
 
   private parseArithmeticCommand(
@@ -183,7 +184,7 @@ export class Parser {
 
   // function function-name nLocalVars
   private parseFunctionCommand(commandInput?: string): ParsedCommand | undefined {
-    const pattern = /^function\s(?<functionName>[a-z]+)\s(?<localVarCount>[0-9]+)/;
+    const pattern = /^function\s(?<functionName>[^\s]+)\s(?<localVarCount>[0-9]+)/;
     const match = commandInput?.match(pattern);
     if (match?.groups) {
       const { functionName, localVarCount } = match.groups;
@@ -197,12 +198,12 @@ export class Parser {
 
   // call function-name nArgs
   private parseCallCommand(commandInput?: string): ParsedCommand | undefined {
-    const pattern = /^call\s(?<functionName>[a-z]+)\s(?<argCount>[0-9]+)/;
+    const pattern = /^call\s(?<functionName>[^\s]+)\s(?<argCount>[0-9]+)/;
     const match = commandInput?.match(pattern);
     if (match?.groups) {
       const { functionName, argCount } = match.groups;
       return {
-        commandType: "C_FUNCTION",
+        commandType: "C_CALL",
         arg1: functionName,
         arg2: parseInt(argCount),
       };

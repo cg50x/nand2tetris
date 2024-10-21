@@ -102,12 +102,12 @@ M=0
 // goto ${vmFileName}.EQ_END_${uniqueIdSuffix}
 @${vmFileName}.EQ_END_${uniqueIdSuffix}
 0;JMP
-(${vmFileName}.EQ_TRUE_${uniqueIdSuffix}
+(${vmFileName}.EQ_TRUE_${uniqueIdSuffix})
 // RAM[SP] = -1
 @SP
 A=M
 M=-1
-(${vmFileName}.EQ_END_${uniqueIdSuffix}
+(${vmFileName}.EQ_END_${uniqueIdSuffix})
 ${incrementSP()}
 `;
 
@@ -126,12 +126,12 @@ M=0
 // goto ${vmFileName}.GT_END_${uniqueIdSuffix}
 @${vmFileName}.GT_END_${uniqueIdSuffix}
 0;JMP
-(${vmFileName}.GT_TRUE_${uniqueIdSuffix}
+(${vmFileName}.GT_TRUE_${uniqueIdSuffix})
 // RAM[SP] = -1
 @SP
 A=M
 M=-1
-(${vmFileName}.GT_END_${uniqueIdSuffix}
+(${vmFileName}.GT_END_${uniqueIdSuffix})
 ${incrementSP()}
 `;
 
@@ -150,12 +150,12 @@ M=0
 // goto ${vmFileName}.LT_END_${uniqueIdSuffix}
 @${vmFileName}.LT_END_${uniqueIdSuffix}
 0;JMP
-(${vmFileName}.LT_TRUE_${uniqueIdSuffix}
+(${vmFileName}.LT_TRUE_${uniqueIdSuffix})
 // RAM[SP] = -1
 @SP
 A=M
 M=-1
-(${vmFileName}.LT_END_${uniqueIdSuffix}
+(${vmFileName}.LT_END_${uniqueIdSuffix})
 ${incrementSP()}
 `;
   

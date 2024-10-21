@@ -31,9 +31,7 @@ export class CodeWriter {
     if (this.currentFileName !== newFileName) {
       this.currentFileName = newFileName;
       // Reset all unique ID suffixes since this is a new file
-      this.nextEqId = 0;
-      this.nextGtId = 0;
-      this.nextLtId = 0;
+      this.resetState();
     }
   }
 
@@ -74,5 +72,26 @@ export class CodeWriter {
   }
   public close() {
     this.fileWriter?.end();
+  }
+
+  /**
+   * Builds the context object and initializes it.
+   */
+  protected buildContext(): WriterContext {
+    return {
+      vmFileName: this.currentFileName,
+      uniqueIdSuffix: ''
+    };
+  }
+
+  protected resetState() {
+    this.resetJumpLabelIds();
+  }
+
+  protected resetJumpLabelIds() {
+    // Reset all unique ID suffixes since this is a new file
+    this.nextEqId = 0;
+    this.nextGtId = 0;
+    this.nextLtId = 0;
   }
 }

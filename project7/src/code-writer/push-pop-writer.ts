@@ -196,20 +196,20 @@ M=M+1
 // pop temp i
 const writePopTemp = ({i}: PushPopArgs) =>
 `//// pop temp ${i}
-// addr = 5 + ${i}
+// R13 = 5 + ${i}
 @${i}
 D=A
 @5
 D=D+A
-@addr
+@R13
 M=D
 // SP--
 @SP
 M=M-1
-// RAM[addr] = RAM[SP]
+// RAM[R13] = RAM[SP]
 A=M
 D=M
-@addr
+@R13
 A=M
 M=D
 `;
