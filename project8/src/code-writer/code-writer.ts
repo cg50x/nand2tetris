@@ -14,23 +14,17 @@ export class CodeWriterProject8 extends CodeWriter {
   public writeLabel(label: string) {
     const context = this.buildContext();
     const translation = writeLabel(label, context);
-    if (translation) {
-      this.fileWriter?.write(translation);
-    }
+    this.writeToFile(translation);
   }
   public writeGoto(label: string) {
     const context = this.buildContext();
     const translation = writeGoto(label, context);
-    if (translation) {
-      this.fileWriter?.write(translation);
-    }
+    this.writeToFile(translation);
   }
   public writeIf(label: string) {
     const context = this.buildContext();
     const translation = writeIf(label, context);
-    if (translation) {
-      this.fileWriter?.write(translation);
-    }
+    this.writeToFile(translation);
   }
 
   /**
@@ -42,9 +36,7 @@ export class CodeWriterProject8 extends CodeWriter {
   public writeFunction(functionName: string, nVars: number) {
     const context = this.buildContext();
     const translation = writeFunction(functionName, nVars, context);
-    if (translation) {
-      this.fileWriter?.write(translation);
-    }
+    this.writeToFile(translation);
   }
 
   public writeCall(functionName: string, nArgs: number) {
@@ -59,17 +51,13 @@ export class CodeWriterProject8 extends CodeWriter {
     context.uniqueIdSuffix = `${callSiteId}`;
     // Translating
     const translation = writeCall(functionName, nArgs, context);
-    if (translation) {
-      this.fileWriter?.write(translation);
-    }
+    this.writeToFile(translation);
   }
 
   public writeReturn() {
     // No context needed, just translate
     const translation = writeReturn();
-    if (translation) {
-      this.fileWriter?.write(translation);
-    }
+    this.writeToFile(translation);
   }
 
   public writeBootstrap() {
@@ -79,8 +67,6 @@ export class CodeWriterProject8 extends CodeWriter {
     context.uniqueIdSuffix = "0";
     // Translating
     const translation = writeBootstrap(context);
-    if (translation) {
-      this.fileWriter?.write(translation);
-    }
+    this.writeToFile(translation);
   }
 }
