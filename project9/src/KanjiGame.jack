@@ -1,0 +1,44 @@
+/** Implements the Kanji Game */
+class KanjiGame {
+    field int direction;
+
+    constructor KanjiGame new() {
+        let direction = 0;
+        return this;
+    }
+    method void run() {
+        // do drawStartGameScreen();
+        do drawKanjiCardScreen();
+        return;
+    }
+    method void drawKanjiCardScreen() {
+        // KANJI CARD SCREEN
+        // Display a single kanji character with directions
+        // 1902 is the center of the screen for a single kanji
+        do KanjiUp.draw(1902);
+        return;
+    }
+    method void drawStartGameScreen() {
+        // Key currently pressed by the user
+        var char key;
+        // START GAME SCREEN
+        do Output.moveCursor(4,20);
+        do Output.printString("Kanji Directions Quiz");
+        do Output.moveCursor(6,10);
+        do Output.printString("Test how well you know the Kanji characters");
+        do Output.moveCursor(7,16);
+        do Output.printString("for up, down, left, and right!");
+        do Output.moveCursor(20, 13);
+        do Output.printString("Press the SPACEBAR to start the game");
+        // Waiting for user to press the spacebar
+        while(~(key = 32)) {
+            let key = Keyboard.keyPressed();
+        }
+        do Screen.clearScreen();
+        return;
+    }
+    method void dispose() {
+        do Memory.deAlloc(this);
+        return;
+    }
+}

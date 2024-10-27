@@ -1,0 +1,10 @@
+/** Main class */
+class Main {
+    function void main() {
+        var KanjiGame game;
+        let game = KanjiGame.new();
+        do game.run();
+        do game.dispose();
+        return;
+    }
+}
