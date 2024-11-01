@@ -1,25 +1,130 @@
 /** Implements the Kanji Game */
 class KanjiGame {
     field int direction;
+    field char KEY_UP;
+    field char KEY_DOWN;
+    field char KEY_LEFT;
+    field char KEY_RIGHT;
+    field int KANJI_SCREEN_POSITION;
+
+    field int totalKanjiAnswered;
+    field int totalKanjiCorrect;
 
     constructor KanjiGame new() {
         let direction = 0;
+        let KEY_UP = 131;
+        let KEY_DOWN = 133;
+        let KEY_LEFT = 130;
+        let KEY_RIGHT = 132;
+        // 1902 is the center of the screen for a single kanji
+        let KANJI_SCREEN_POSITION = 1902;
+        let totalKanjiAnswered = 0;
+        let totalKanjiCorrect = 0;
         return this;
     }
     method void run() {
-        // do drawStartGameScreen();
+        do drawStartGameScreen();
         do drawKanjiCardScreen();
+        do drawKanjiResultScreen();
         return;
     }
-    method void drawKanjiCardScreen() {
-        // KANJI CARD SCREEN
-        // Display a single kanji character with directions
-        // 1902 is the center of the screen for a single kanji
+    method void drawKanjiResultScreen() {
         do Output.moveCursor(2,15);
-        do Output.printString("What does this Kanji character mean?");
-        do Output.moveCursor(15,18);
-        do Output.printString("Use the arrow keys to answer.");
-        do KanjiUp.draw(1902);
+        do Output.printString("RESULTS");
+        do Output.moveCursor(5, 15);
+        do Output.printString("Total Answered:");
+        do Output.moveCursor(5, 31);
+        do Output.printInt(totalKanjiAnswered);
+        do Output.moveCursor(8, 15);
+        do Output.printString("Total Correct:");
+        do Output.moveCursor(8, 30);
+        do Output.printInt(totalKanjiCorrect);
+        return;
+    }
+
+    // KANJI CARD SCREEN
+    // Display a single kanji character with directions
+    method void drawKanjiCardScreen() {
+        var char key, currentKanjiKey;
+        var Array kanjiKeys;
+        var int length, i;
+        let length = 4;
+        let kanjiKeys = Array.new(length);
+        let kanjiKeys[0] = KEY_UP;
+        let kanjiKeys[1] = KEY_LEFT;
+        let kanjiKeys[2] = KEY_DOWN;
+        let kanjiKeys[3] = KEY_RIGHT;
+        let i = 0;
+        while (i < length) {
+            let currentKanjiKey = kanjiKeys[i];
+            do Output.moveCursor(2,15);
+            do Output.printString("What does this Kanji character mean?");
+            do Output.moveCursor(15,18);
+            do Output.printString("Use the arrow keys to answer.");
+            if (currentKanjiKey = KEY_UP) {
+                do KanjiUp.draw(KANJI_SCREEN_POSITION);
+            }
+            if (currentKanjiKey = KEY_DOWN) {
+                do KanjiDown.draw(KANJI_SCREEN_POSITION);
+            }
+            if (currentKanjiKey = KEY_LEFT) {
+                do KanjiLeft.draw(KANJI_SCREEN_POSITION);
+            }
+            if (currentKanjiKey = KEY_RIGHT) {
+                do KanjiRight.draw(KANJI_SCREEN_POSITION);
+            }
+            let key = waitForArrowKeyPressed();
+            do Screen.clearScreen();
+            if (currentKanjiKey = KEY_UP) {
+                do KanjiUp.draw(1902);
+                if (key = KEY_UP) {
+                    do Output.moveCursor(2,22);    
+                    do Output.printString("Correct! This means UP");
+                } else {
+                    do Output.moveCursor(2,24);
+                    do Output.printString("Wrong. This means UP");
+                }
+            }
+            if (currentKanjiKey = KEY_DOWN) {
+                do KanjiDown.draw(1902);
+                if (key = KEY_DOWN) {
+                    do Output.moveCursor(2,20);    
+                    do Output.printString("Correct! This means DOWN");
+                } else {
+                    do Output.moveCursor(2,22);
+                    do Output.printString("Wrong. This means DOWN");
+                }
+            }
+            if (currentKanjiKey = KEY_LEFT) {
+                do KanjiLeft.draw(1902);
+                if (key = KEY_LEFT) {
+                    do Output.moveCursor(2,20);    
+                    do Output.printString("Correct! This means LEFT");
+                } else {
+                    do Output.moveCursor(2,22);
+                    do Output.printString("Wrong. This means LEFT");
+                }
+            }
+            if (currentKanjiKey = KEY_RIGHT) {
+                do KanjiRight.draw(1902);
+                if (key = KEY_RIGHT) {
+                    do Output.moveCursor(2,19);    
+                    do Output.printString("Correct! This means RIGHT");
+                } else {
+                    do Output.moveCursor(2,21);
+                    do Output.printString("Wrong. This means RIGHT");
+                }
+            }
+            do Output.moveCursor(15,18);
+            do Output.printString("Press the SPACEBAR to continue.");
+            do waitForSpacebarPressed();
+            do Screen.clearScreen();
+            let i = i + 1;
+            if (currentKanjiKey = key) {
+                let totalKanjiCorrect = totalKanjiCorrect + 1;
+            }
+        }
+        let totalKanjiAnswered = length;
         return;
     }
     method void drawStartGameScreen() {
@@ -34,15 +139,33 @@ class KanjiGame {
         do Output.printString("for up, down, left, and right!");
         do Output.moveCursor(20, 13);
         do Output.printString("Press the SPACEBAR to start the game");
-        // Waiting for user to press the spacebar
-        while(~(key = 32)) {
-            let key = Keyboard.keyPressed();
-        }
+        do waitForSpacebarPressed();
         do Screen.clearScreen();
         return;
     }
     method void dispose() {
         do Memory.deAlloc(this);
+        return;
+    }
+    method char waitForArrowKeyPressed() {
+        var char key;
+        while ((~(key = KEY_DOWN)) & (~(key = KEY_UP)) & (~(key = KEY_LEFT)) & (~(key = KEY_RIGHT))) {
+            let key = waitForKeyPressed();
+        }
+        return key;
+    }
+    method char waitForKeyPressed() {
+        var char key;
+        while (key = 0) {
+            let key = Keyboard.keyPressed();
+        }
+        return key;
+    }
+    method void waitForSpacebarPressed() {
+        var char key;
+        while (~(key = 32)) {
+            let key = Keyboard.keyPressed();
+        }
         return;
     }
 }
