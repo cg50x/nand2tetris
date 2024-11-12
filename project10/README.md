@@ -6,10 +6,8 @@ To install dependencies:
 bun install
 ```
 
-To run:
+To run JackTokenizer tests
 
 ```bash
-bun run src/index.ts
+./run-jack-tokenizer-tests.sh
 ```
-
-This project was created using `bun init` in bun v1.1.29. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
