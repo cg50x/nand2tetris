@@ -176,3 +176,4 @@ dist
 
 # Testing output
 test-output/
+*_CG.xml
