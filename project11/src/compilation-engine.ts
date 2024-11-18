@@ -1,6 +1,7 @@
 import type { BunFile, FileSink } from "bun";
 import { JackTokenizer, TokenType } from "./jack-tokenizer";
 import { escapeXmlEntities } from "./xml-utils";
+import { VMWriter } from "./vm-writer";
 
 /**
  * CompilationEngine: Gets its input from a JackTokenizer
@@ -12,7 +13,7 @@ export class CompilationEngine {
   private OPS = ["+", "-", "*", "/", "&", "|", "<", ">", "="];
   private UNARY_OPS = ["-", "~"];
   private tokenizer: JackTokenizer | null = null;
-  private outputFileWriter: FileSink | null = null;
+  private vmWriter: VMWriter | null = null;
 
   /**
    * Takes in Input stream/file and output stream/file
@@ -22,7 +23,7 @@ export class CompilationEngine {
   static async create(inputFile: BunFile, outputFile: BunFile) {
     const newCompilationEngine = new CompilationEngine();
     newCompilationEngine.tokenizer = await JackTokenizer.create(inputFile);
-    newCompilationEngine.outputFileWriter = outputFile.writer();
+    newCompilationEngine.vmWriter = new VMWriter(outputFile);
     await newCompilationEngine.tokenizer.advance();
     return newCompilationEngine;
   }
