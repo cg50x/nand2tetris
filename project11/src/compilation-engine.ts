@@ -2,6 +2,7 @@ import type { BunFile, FileSink } from "bun";
 import { JackTokenizer, TokenType } from "./jack-tokenizer";
 import { escapeXmlEntities } from "./xml-utils";
 import { VMWriter } from "./vm-writer";
+import { SymbolTable } from "./symbol-table";
 
 /**
  * CompilationEngine: Gets its input from a JackTokenizer
@@ -20,6 +21,9 @@ export class CompilationEngine {
   private insideSubroutine: boolean = false;
   private subroutineName: string = "";
   private subroutineVarCount: number = NaN;
+
+  private classSymbolTable = new SymbolTable();
+  private subroutineSymbolTable = new SymbolTable();
 
   /**
    * Takes in Input stream/file and output stream/file
