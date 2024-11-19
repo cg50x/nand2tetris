@@ -96,10 +96,10 @@ export class VMWriter {
   /**
    * Writes a VM function command.
    * @param name 
-   * @param nArgs 
+   * @param nVars 
    */
-  writeFunction(name: string, nArgs: number) {
-    this.writeLine(`function ${name} ${nArgs}`);
+  writeFunction(name: string, nVars: number) {
+    this.writeLine(`function ${name} ${nVars}`);
   }
 
   /**

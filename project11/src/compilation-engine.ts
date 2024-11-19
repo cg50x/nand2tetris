@@ -15,6 +15,12 @@ export class CompilationEngine {
   private tokenizer: JackTokenizer | null = null;
   private vmWriter: VMWriter | null = null;
 
+  private should: boolean = false;
+  private className: string = "";
+  private insideSubroutine: boolean = false;
+  private subroutineName: string = "";
+  private subroutineVarCount: number = NaN;
+
   /**
    * Takes in Input stream/file and output stream/file
    * Creates a new compilation engine with the given input and output.
@@ -39,7 +45,7 @@ export class CompilationEngine {
    */
   async compileClass() {
     await this.processKeyword("class");
-    await this.processIdentifier();
+    this.className = await this.processIdentifier() ?? "";
     await this.processSymbol("{");
     while (this.isClassVarDec()) {
       await this.compileClassVarDec();
@@ -74,11 +80,12 @@ export class CompilationEngine {
     } else {
       await this.processType();
     }
-    await this.processIdentifier(); // subroutineName
+    const subroutineName = await this.processIdentifier(); // subroutineName
     await this.processSymbol("(");
     await this.compileParameterList();
     await this.processSymbol(")");
     await this.compileSubroutineBody();
+    this.vmWriter?.writeFunction(`${this.className}.${subroutineName}`, this.subroutineVarCount);
   }
 
   /**
@@ -102,8 +109,10 @@ export class CompilationEngine {
    */
   async compileSubroutineBody() {
     await this.processSymbol("{");
+    this.subroutineVarCount = 0;
     while (this.isKeyword("var")) {
       await this.compileVarDec();
+      this.subroutineVarCount += this.varDecCount;
     }
     await this.compileStatements();
     await this.processSymbol("}");
@@ -112,11 +121,14 @@ export class CompilationEngine {
   /**
    * Compiles a var declaration.
    */
+  private varDecCount = 0;
   async compileVarDec() {
     await this.processKeyword("var");
     await this.processType();
     await this.processIdentifier(); // varName
+    this.varDecCount = 1;
     while (this.isSymbol(",")) {
+      this.varDecCount += 1;
       await this.processSymbol(",");
       await this.processIdentifier(); // varName
     }
@@ -329,12 +341,17 @@ export class CompilationEngine {
    * This optional parameters supports the ability to look ahead two tokens
    * in the compileTerm method.
    * @param identifier
+   * @returns Identifier name
    */
   private async processIdentifier(identifier?: string) {
+    let result: string | undefined;
     if (typeof identifier === "string") {
+      result = identifier
     } else if (this.tokenizer?.tokenType() === TokenType.Identifier) {
+      result = this.tokenizer?.identifier();
       await this.tokenizer.advance();
     }
+    return result;
   }
 
   private async processType() {
