@@ -40,7 +40,7 @@ export class VMWriter {
    * @param index
    */
   writePush(segment: Segment, index: number) {
-    this.writeLine(`push ${segment} ${index}\n`);
+    this.writeLine(`push ${segment} ${index}`);
   }
 
   /**

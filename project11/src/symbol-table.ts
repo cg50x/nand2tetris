@@ -1,7 +1,7 @@
 
 type Kind = 'field' | 'static' | 'local' | 'argument';
 
-type SymbolTableEntry = {
+export type SymbolTableEntry = {
   name: string;
   type: string; // 'int' | 'char' | 'boolean' or Class name
   kind: Kind;
@@ -19,12 +19,12 @@ type SymbolTableEntry = {
  * tables can be assumed to be either a subroutine name or a class name.
  */
 export class SymbolTable {
-  staticCount = 0;
-  fieldCount = 0;
-  argCount = 0;
-  localCount = 0;
+  private staticCount = 0;
+  private fieldCount = 0;
+  private argCount = 0;
+  private localCount = 0;
 
-  entries: SymbolTableEntry[] = [];
+  private entries: SymbolTableEntry[] = [];
 
   /**
    * Empties the symbol table, and resets the four indexes to 0.

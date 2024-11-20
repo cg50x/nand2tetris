@@ -1,8 +1,7 @@
 import type { BunFile, FileSink } from "bun";
 import { JackTokenizer, TokenType } from "./jack-tokenizer";
-import { escapeXmlEntities } from "./xml-utils";
 import { VMWriter } from "./vm-writer";
-import { SymbolTable } from "./symbol-table";
+import { SymbolTable, type SymbolTableEntry } from "./symbol-table";
 
 /**
  * CompilationEngine: Gets its input from a JackTokenizer
@@ -12,15 +11,11 @@ import { SymbolTable } from "./symbol-table";
  */
 export class CompilationEngine {
   private OPS = ["+", "-", "*", "/", "&", "|", "<", ">", "="];
-  private UNARY_OPS = ["-", "~"];
+  private UNARY_OPS = ["-", "~"] as const;
   private tokenizer: JackTokenizer | null = null;
   private vmWriter: VMWriter | null = null;
 
-  private should: boolean = false;
   private className: string = "";
-  private insideSubroutine: boolean = false;
-  private subroutineName: string = "";
-  private subroutineVarCount: number = NaN;
 
   private classSymbolTable = new SymbolTable();
   private subroutineSymbolTable = new SymbolTable();
@@ -50,6 +45,7 @@ export class CompilationEngine {
   async compileClass() {
     await this.processKeyword("class");
     this.className = await this.processIdentifier() ?? "";
+    console.log(this.className);
     await this.processSymbol("{");
     while (this.isClassVarDec()) {
       await this.compileClassVarDec();
@@ -64,12 +60,20 @@ export class CompilationEngine {
    * Compiles a static variable declaration, or a field declaration.
    */
   async compileClassVarDec() {
-    await this.processKeyword("static", "field");
-    await this.processType();
-    await this.processIdentifier(); // varName
+    const varKind = await this.processKeyword("static", "field");
+    const varType = await this.processType();
+    let varName = await this.processIdentifier();
+    // Return early if kind type or name is invalid
+    if (!(varName && varType && (varKind === "static" || varKind === "field"))) {
+      return;
+    }
+    this.classSymbolTable.define(varName, varType, varKind);
     while (this.isSymbol(",")) {
       await this.processSymbol(",");
-      await this.processIdentifier(); // varName
+      varName = await this.processIdentifier();
+      if (varName) {
+        this.classSymbolTable.define(varName, varType, varKind);
+      }
     }
     await this.processSymbol(";");
   }
@@ -77,19 +81,20 @@ export class CompilationEngine {
   /**
    * Compiles a complete method, function, or constructor.
    */
+  private currentSubroutineName = "";
   async compileSubroutine() {
+    this.subroutineSymbolTable.reset();
     await this.processKeyword("constructor", "function", "method");
     if (this.isKeyword("void")) {
       await this.processKeyword("void");
     } else {
       await this.processType();
     }
-    const subroutineName = await this.processIdentifier(); // subroutineName
+    this.currentSubroutineName = await this.processIdentifier() ?? "";
     await this.processSymbol("(");
     await this.compileParameterList();
     await this.processSymbol(")");
     await this.compileSubroutineBody();
-    this.vmWriter?.writeFunction(`${this.className}.${subroutineName}`, this.subroutineVarCount);
   }
 
   /**
@@ -98,12 +103,18 @@ export class CompilationEngine {
    */
   async compileParameterList() {
     if (this.isType()) {
-      await this.processType();
-      await this.processIdentifier(); // varName
+      let varType = await this.processType();
+      let varName = await this.processIdentifier();
+      if (varType && varName) {
+        this.subroutineSymbolTable.define(varName, varType, "argument");
+      }
       while (this.isSymbol(",")) {
         await this.processSymbol(",");
-        await this.processType();
-        await this.processIdentifier(); // varName
+        varType = await this.processType();
+        varName = await this.processIdentifier();
+        if (varType && varName) {
+          this.subroutineSymbolTable.define(varName, varType, "argument");
+        }
       }
     }
   }
@@ -113,11 +124,11 @@ export class CompilationEngine {
    */
   async compileSubroutineBody() {
     await this.processSymbol("{");
-    this.subroutineVarCount = 0;
     while (this.isKeyword("var")) {
       await this.compileVarDec();
-      this.subroutineVarCount += this.varDecCount;
     }
+    const localVarCount = this.subroutineSymbolTable.varCount("local");
+    this.vmWriter?.writeFunction(`${this.className}.${this.currentSubroutineName}`, localVarCount);
     await this.compileStatements();
     await this.processSymbol("}");
   }
@@ -125,16 +136,19 @@ export class CompilationEngine {
   /**
    * Compiles a var declaration.
    */
-  private varDecCount = 0;
   async compileVarDec() {
     await this.processKeyword("var");
-    await this.processType();
-    await this.processIdentifier(); // varName
-    this.varDecCount = 1;
+    const varType = await this.processType();
+    let varName = await this.processIdentifier(); // varName
+    if (varName && varType) {
+      this.subroutineSymbolTable.define(varName, varType, "local");
+    }
     while (this.isSymbol(",")) {
-      this.varDecCount += 1;
       await this.processSymbol(",");
-      await this.processIdentifier(); // varName
+      varName = await this.processIdentifier(); // varName
+      if (varName && varType) {
+        this.subroutineSymbolTable.define(varName, varType, "local");
+      }
     }
     await this.processSymbol(";");
   }
@@ -253,18 +267,66 @@ export class CompilationEngine {
    */
   async compileTerm() {
     if (this.isIntegerConstant()) {
-      await this.processIntegerConstant();
+      const intVal = await this.processIntegerConstant();
+      if (typeof intVal === "number") {
+        this.vmWriter?.writePush("constant", intVal);
+      }
     } else if (this.isStringConstant()) {
-      await this.processStringConstant();
+      const stringVal = await this.processStringConstant();
+      if (typeof stringVal === "string") {
+        // Slide 78 for into
+        /*
+          push constant {length}
+          call String.new 1
+          pop pointer 0
+          # for each character
+            push constant c
+            call String.appendChar 1
+        */
+        this.vmWriter?.writePush("constant", stringVal.length);
+        this.vmWriter?.writeCall("String.new", 1);
+        this.vmWriter?.writePop("pointer", 0);
+        stringVal.split("").forEach((stringChar) => {
+          this.vmWriter?.writePush("constant", stringChar.charCodeAt(0));
+          this.vmWriter?.writeCall("String.appendChar", 1);
+        });
+      }
     } else if (this.isKeyword("true", "false", "null", "this")) {
-      await this.processKeyword("true", "false", "null", "this");
+      /*
+        true = constant 1, followed by neg
+        false = constant 0
+        null = constant 0
+        this = pointer 0
+      */
+      const keyword = await this.processKeyword("true", "false", "null", "this");
+      switch (keyword) {
+        case "true":
+          this.vmWriter?.writePush("constant", 1);
+          this.vmWriter?.writeArithmetic("neg");
+          break;
+        case "false":
+        case "null":
+          this.vmWriter?.writePush("constant", 0);
+          break;
+        case "this":
+          this.vmWriter?.writePush("pointer", 0);
+          break;
+      }
     } else if (this.isSymbol("(")) {
       await this.processSymbol("(");
       await this.compileExpression();
       await this.processSymbol(")");
     } else if (this.isSymbol(...this.UNARY_OPS)) {
-      await this.processSymbol(...this.UNARY_OPS);
+      const symbol = await this.processSymbol(...this.UNARY_OPS);
       await this.compileTerm();
+      switch (symbol) {
+        case "-":
+          this.vmWriter?.writeArithmetic("neg");
+          break;
+        case "~":
+          this.vmWriter?.writeArithmetic("not");
+          break;
+      }
     } else if (this.isIdentifier()) {
       // Handling varName | varName[expression] | subroutineCall
       // Saving the current identifier token's value
@@ -272,17 +334,38 @@ export class CompilationEngine {
       const identifier = this.tokenizer?.identifier();
       await this.tokenizer?.advance();
       if (this.isSymbol("[")) {
-        // Handling array access varName[expression]
-        await this.processIdentifier(identifier);
+        // Handle array access with vm writer
+        /*
+          See Slide 63
+          push arr
+          push 2
+          add
+          pop pointer 1
+          push that 0
+        */
+        const arrayIdentifier = await this.processIdentifier(identifier);
+        if (arrayIdentifier) {
+          this.writePushVariable(arrayIdentifier);
+        }
         await this.processSymbol("[");
         await this.compileExpression();
         await this.processSymbol("]");
+        this.vmWriter?.writeArithmetic("add");
+        this.vmWriter?.writePop("pointer", 1);
+        this.vmWriter?.writePush("that", 0);
       } else if (this.isSymbol(".", "(")) {
         // Handling subroutine call
-        await this.processSubroutineCall(identifier);
+        const callDetails = await this.processSubroutineCall(identifier);
+        if (callDetails) {
+          const { calleeName, nArgs } = callDetails;
+          this.vmWriter?.writeCall(calleeName, nArgs);
+        }
       } else {
         // Handling normal identifier varName
         await this.processIdentifier(identifier);
+        if (identifier) {
+          this.writePushVariable(identifier);
+        }
       }
     }
   }
@@ -312,7 +395,9 @@ export class CompilationEngine {
       this.tokenizer?.tokenType() === TokenType.Keyword &&
       keywords.includes(this.tokenizer.keyWord() ?? "")
     ) {
+      let keyword = this.tokenizer.keyWord();
       await this.tokenizer.advance();
+      return keyword;
     }
   }
 
@@ -321,19 +406,25 @@ export class CompilationEngine {
       this.tokenizer?.tokenType() === TokenType.Symbol &&
       symbols.includes(this.tokenizer.symbol() ?? "")
     ) {
+      const symbol = this.tokenizer.symbol();
       await this.tokenizer.advance();
+      return symbol;
     }
   }
 
   private async processIntegerConstant() {
     if (this.tokenizer?.tokenType() === TokenType.IntConst) {
+      const intValue = this.tokenizer.intVal();
       await this.tokenizer.advance();
+      return intValue;
     }
   }
 
   private async processStringConstant() {
     if (this.tokenizer?.tokenType() === TokenType.StringConst) {
+      const stringVal = this.tokenizer.stringVal();
       await this.tokenizer.advance();
+      return stringVal;
     }
   }
 
@@ -361,9 +452,9 @@ export class CompilationEngine {
   private async processType() {
     const types = ["int", "char", "boolean"];
     if (this.isKeyword(...types)) {
-      await this.processKeyword(...types);
+      return await this.processKeyword(...types);
     } else {
-      await this.processIdentifier();
+      return await this.processIdentifier();
     }
   }
 
@@ -376,18 +467,25 @@ export class CompilationEngine {
    * in the compileTerm method.
    * @param subroutineName
    */
-  private async processSubroutineCall(subroutineName?: string) {
+  private async processSubroutineCall(subroutineName?: string): Promise<{ calleeName: string, nArgs: number } | void> {
     // There are two forms of a subroutine call:
     // - subroutineName(expressionList)
     // - classOrVarName.subroutineName(expressionList)
-    await this.processIdentifier(subroutineName); // subroutineName or classOrVarName
+    let calleeName = await this.processIdentifier(subroutineName); // subroutineName or classOrVarName
     if (this.isSymbol(".")) {
       await this.processSymbol(".");
-      await this.processIdentifier();
+      const name = await this.processIdentifier();
+      calleeName = calleeName ? `${calleeName}.${name}` : name;
     }
     await this.processSymbol("(");
-    await this.compileExpressionList();
+    const nArgs = await this.compileExpressionList();
     await this.processSymbol(")");
+    if (calleeName) {
+      return {
+        calleeName,
+        nArgs
+      };
+    }
   }
 
   /**
@@ -444,5 +542,34 @@ export class CompilationEngine {
 
   private isIdentifier() {
     return this.tokenizer?.tokenType() === TokenType.Identifier;
+  }
+
+  private writePushVariable(identifier: string) {
+    let kind = this.subroutineSymbolTable.kindOf(identifier);
+    let index = this.subroutineSymbolTable.indexOf(identifier);
+    if (kind && typeof index === "number") {
+      switch (kind) {
+        case "local":
+          this.vmWriter?.writePush("local", index);
+          break;
+        case "argument":
+          this.vmWriter?.writePush("argument", index);
+          break;
+      }
+    } else {
+      // Looking up via class symbol table
+      kind = this.classSymbolTable.kindOf(identifier);
+      index = this.classSymbolTable.indexOf(identifier);
+      if (kind && typeof index === "number") {
+        switch (kind) {
+          case "static":
+            this.vmWriter?.writePush("static", index);
+            break;
+          case "field":
+            this.vmWriter?.writePush("this", index);
+            break;
+        }
+      }
+    }
   }
 }
