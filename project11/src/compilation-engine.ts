@@ -1,7 +1,7 @@
 import type { BunFile, FileSink } from "bun";
 import { JackTokenizer, TokenType } from "./jack-tokenizer";
 import { VMWriter } from "./vm-writer";
-import { SymbolTable, type SymbolTableEntry } from "./symbol-table";
+import { SymbolTable, type Kind, type SymbolTableEntry } from "./symbol-table";
 
 /**
  * CompilationEngine: Gets its input from a JackTokenizer
@@ -44,7 +44,7 @@ export class CompilationEngine {
    */
   async compileClass() {
     await this.processKeyword("class");
-    this.className = await this.processIdentifier() ?? "";
+    this.className = (await this.processIdentifier()) ?? "";
     console.log(this.className);
     await this.processSymbol("{");
     while (this.isClassVarDec()) {
@@ -64,7 +64,9 @@ export class CompilationEngine {
     const varType = await this.processType();
     let varName = await this.processIdentifier();
     // Return early if kind type or name is invalid
-    if (!(varName && varType && (varKind === "static" || varKind === "field"))) {
+    if (
+      !(varName && varType && (varKind === "static" || varKind === "field"))
+    ) {
       return;
     }
     this.classSymbolTable.define(varName, varType, varKind);
@@ -90,7 +92,7 @@ export class CompilationEngine {
     } else {
       await this.processType();
     }
-    this.currentSubroutineName = await this.processIdentifier() ?? "";
+    this.currentSubroutineName = (await this.processIdentifier()) ?? "";
     await this.processSymbol("(");
     await this.compileParameterList();
     await this.processSymbol(")");
@@ -128,7 +130,10 @@ export class CompilationEngine {
       await this.compileVarDec();
     }
     const localVarCount = this.subroutineSymbolTable.varCount("local");
-    this.vmWriter?.writeFunction(`${this.className}.${this.currentSubroutineName}`, localVarCount);
+    this.vmWriter?.writeFunction(
+      `${this.className}.${this.currentSubroutineName}`,
+      localVarCount
+    );
     await this.compileStatements();
     await this.processSymbol("}");
   }
@@ -183,7 +188,7 @@ export class CompilationEngine {
    */
   async compileLet() {
     await this.processKeyword("let");
-    await this.processIdentifier(); // varName
+    const varName = await this.processIdentifier();
     if (this.isSymbol("[")) {
       await this.processSymbol("[");
       await this.compileExpression();
@@ -192,19 +197,29 @@ export class CompilationEngine {
     await this.processSymbol("=");
     await this.compileExpression();
     await this.processSymbol(";");
+    if (varName) {
+      this.writePopVariable(varName);
+    }
   }
 
   /**
    * Compiles an if statement,
    * possibly with a trailing else clause.
    */
+  private nextIfLabelId = 0;
   async compileIf() {
+    const ifLabelId = this.nextIfLabelId++;
+    // See Slide 28 for vm code info
     await this.processKeyword("if");
     await this.processSymbol("(");
     await this.compileExpression();
     await this.processSymbol(")");
     await this.processSymbol("{");
+    this.vmWriter?.writeArithmetic("not");
+    this.vmWriter?.writeIf(`IF_GOTO_NOT_${ifLabelId}`);
     await this.compileStatements();
+    this.vmWriter?.writeGoto(`IF_GOTO_END_${ifLabelId}`);
+    this.vmWriter?.writeLabel(`IF_GOTO_NOT_${ifLabelId}`);
     await this.processSymbol("}");
     if (this.isKeyword("else")) {
       await this.processKeyword("else");
@@ -212,19 +227,35 @@ export class CompilationEngine {
       await this.compileStatements();
       await this.processSymbol("}");
     }
+    this.vmWriter?.writeLabel(`IF_GOTO_END_${ifLabelId}`);
   }
 
   /**
    * Compiles a while statement
    */
+  private nextWhileLabelId = 0;
   async compileWhile() {
+    // See Slide 31
+    const whileLabelId = this.nextWhileLabelId++;
+    const startLabel = `WHILE_START_${whileLabelId}`;
+    const endLabel = `WHILE_END_${whileLabelId}`;
+    // label L1
+    this.vmWriter?.writeLabel(startLabel);
     await this.processKeyword("while");
     await this.processSymbol("(");
     await this.compileExpression();
+    // not
+    this.vmWriter?.writeArithmetic("not");
+    // if-goto L2
+    this.vmWriter?.writeIf(endLabel);
     await this.processSymbol(")");
     await this.processSymbol("{");
     await this.compileStatements();
     await this.processSymbol("}");
+    // goto L1
+    this.vmWriter?.writeGoto(startLabel);
+    // label L2
+    this.vmWriter?.writeLabel(endLabel);
   }
 
   /**
@@ -234,6 +265,7 @@ export class CompilationEngine {
     await this.processKeyword("do");
     await this.processSubroutineCall();
     await this.processSymbol(";");
+    this.vmWriter?.writePop("temp", 0);
   }
 
   /**
@@ -243,18 +275,52 @@ export class CompilationEngine {
     await this.processKeyword("return");
     if (!this.isSymbol(";")) {
       await this.compileExpression();
+    } else {
+      // We need to return a 0 if nothing is returned.
+      this.vmWriter?.writePush("constant", 0);
     }
     await this.processSymbol(";");
+    this.vmWriter?.writeReturn();
   }
 
   /**
    * Compiles an expression.
    */
   async compileExpression() {
+    // See Slide 16
     await this.compileTerm();
     while (this.isSymbol(...this.OPS)) {
-      await this.processSymbol(...this.OPS);
+      const symbol = await this.processSymbol(...this.OPS);
       await this.compileTerm();
+      switch (symbol) {
+        case "+":
+          this.vmWriter?.writeArithmetic("add")
+          break;
+        case "-":
+          this.vmWriter?.writeArithmetic("sub")
+          break;
+        case "*":
+          this.vmWriter?.writeCall("Math.multiply", 2);
+          break;
+        case "/":
+          this.vmWriter?.writeCall("Math.divide", 2);
+          break;
+        case "&":
+          this.vmWriter?.writeArithmetic("and");
+          break;
+        case "|":
+          this.vmWriter?.writeArithmetic("or");
+          break;
+        case "<":
+          this.vmWriter?.writeArithmetic("lt");
+          break;
+        case ">":
+          this.vmWriter?.writeArithmetic("gt");
+          break;
+        case "=":
+          this.vmWriter?.writeArithmetic("eq");
+          break;
+      }
     }
   }
 
@@ -298,7 +364,12 @@ export class CompilationEngine {
         null = constant 0
         this = pointer 0
       */
-      const keyword = await this.processKeyword("true", "false", "null", "this");
+      const keyword = await this.processKeyword(
+        "true",
+        "false",
+        "null",
+        "this"
+      );
       switch (keyword) {
         case "true":
           this.vmWriter?.writePush("constant", 1);
@@ -441,7 +512,7 @@ export class CompilationEngine {
   private async processIdentifier(identifier?: string) {
     let result: string | undefined;
     if (typeof identifier === "string") {
-      result = identifier
+      result = identifier;
     } else if (this.tokenizer?.tokenType() === TokenType.Identifier) {
       result = this.tokenizer?.identifier();
       await this.tokenizer.advance();
@@ -467,7 +538,9 @@ export class CompilationEngine {
    * in the compileTerm method.
    * @param subroutineName
    */
-  private async processSubroutineCall(subroutineName?: string): Promise<{ calleeName: string, nArgs: number } | void> {
+  private async processSubroutineCall(
+    subroutineName?: string
+  ): Promise<{ calleeName: string; nArgs: number } | void> {
     // There are two forms of a subroutine call:
     // - subroutineName(expressionList)
     // - classOrVarName.subroutineName(expressionList)
@@ -483,7 +556,7 @@ export class CompilationEngine {
     if (calleeName) {
       return {
         calleeName,
-        nArgs
+        nArgs,
       };
     }
   }
@@ -545,30 +618,51 @@ export class CompilationEngine {
   }
 
   private writePushVariable(identifier: string) {
+    const symbolEntry = this.kindAndIndexOf(identifier);
+    if (symbolEntry) {
+      const { kind, index } = symbolEntry;
+      // Maybe kind should've just used "this" instead...
+      if (kind === "field") {
+        this.vmWriter?.writePush("this", index);
+      } else {
+        this.vmWriter?.writePush(kind, index);
+      }
+    }
+  }
+
+  private writePopVariable(identifier: string) {
+    const symbolEntry = this.kindAndIndexOf(identifier);
+    if (symbolEntry) {
+      const { kind, index } = symbolEntry;
+      if (kind === "field") {
+        this.vmWriter?.writePop("this", index);
+      } else {
+        this.vmWriter?.writePop(kind, index);
+      }
+    }
+  }
+
+  private kindAndIndexOf(
+    identifier: string
+  ): { kind: Kind; index: number; scope: "subroutine" | "class" } | undefined {
     let kind = this.subroutineSymbolTable.kindOf(identifier);
     let index = this.subroutineSymbolTable.indexOf(identifier);
-    if (kind && typeof index === "number") {
-      switch (kind) {
-        case "local":
-          this.vmWriter?.writePush("local", index);
-          break;
-        case "argument":
-          this.vmWriter?.writePush("argument", index);
-          break;
-      }
+    if ((kind === "local" || kind === "argument") && typeof index === "number") {
+      return {
+        kind,
+        index,
+        scope: "subroutine"
+      };
     } else {
       // Looking up via class symbol table
       kind = this.classSymbolTable.kindOf(identifier);
       index = this.classSymbolTable.indexOf(identifier);
-      if (kind && typeof index === "number") {
-        switch (kind) {
-          case "static":
-            this.vmWriter?.writePush("static", index);
-            break;
-          case "field":
-            this.vmWriter?.writePush("this", index);
-            break;
-        }
+      if ((kind === "static" || kind === "field") && typeof index === "number") {
+        return {
+          kind,
+          index,
+          scope: "class"
+        };
       }
     }
   }

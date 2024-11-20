@@ -1,5 +1,5 @@
 
-type Kind = 'field' | 'static' | 'local' | 'argument';
+export type Kind = 'field' | 'static' | 'local' | 'argument';
 
 export type SymbolTableEntry = {
   name: string;
