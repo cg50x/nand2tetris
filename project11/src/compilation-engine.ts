@@ -45,7 +45,7 @@ export class CompilationEngine {
   async compileClass() {
     await this.processKeyword("class");
     this.className = (await this.processIdentifier()) ?? "";
-    console.log(this.className);
+    console.log(`Setting classname to ${this.className}`);
     await this.processSymbol("{");
     while (this.isClassVarDec()) {
       await this.compileClassVarDec();
@@ -84,9 +84,11 @@ export class CompilationEngine {
    * Compiles a complete method, function, or constructor.
    */
   private currentSubroutineName = "";
+  private currentSubroutineKind = "";
   async compileSubroutine() {
     this.subroutineSymbolTable.reset();
-    await this.processKeyword("constructor", "function", "method");
+    this.currentSubroutineKind =
+      (await this.processKeyword("constructor", "function", "method")) ?? "";
     if (this.isKeyword("void")) {
       await this.processKeyword("void");
     } else {
@@ -94,6 +96,12 @@ export class CompilationEngine {
     }
     this.currentSubroutineName = (await this.processIdentifier()) ?? "";
     await this.processSymbol("(");
+    if (this.currentSubroutineKind === "method") {
+      // Before collecting the arguments in a method,
+      // we need to add 'this' as the first argument.
+      // This symbol won't actually be used so we don't need to add a type.
+      this.subroutineSymbolTable.define("this", "", "argument");
+    }
     await this.compileParameterList();
     await this.processSymbol(")");
     await this.compileSubroutineBody();
@@ -134,6 +142,22 @@ export class CompilationEngine {
       `${this.className}.${this.currentSubroutineName}`,
       localVarCount
     );
+    if (this.currentSubroutineKind === "constructor") {
+      // Slide 46
+      // Allocating memory for the constructed object
+      this.vmWriter?.writePush(
+        "constant",
+        this.classSymbolTable.varCount("field")
+      );
+      this.vmWriter?.writeCall("Memory.alloc", 1);
+      // Setting the object as THIS
+      this.vmWriter?.writePop("pointer", 0);
+    } else if (this.currentSubroutineKind === "method") {
+      // Slide 50
+      // Setting the first arg object as THIS
+      this.vmWriter?.writePush("argument", 0);
+      this.vmWriter?.writePop("pointer", 0);
+    }
     await this.compileStatements();
     await this.processSymbol("}");
   }
@@ -189,15 +213,35 @@ export class CompilationEngine {
   async compileLet() {
     await this.processKeyword("let");
     const varName = await this.processIdentifier();
-    if (this.isSymbol("[")) {
+    const isSettingArrayElement = this.isSymbol("[");
+    if (isSettingArrayElement && varName) {
+      // Slide 63
+      // push arr
+      this.writePushVariable(varName);
       await this.processSymbol("[");
       await this.compileExpression();
       await this.processSymbol("]");
+      // add
+      this.vmWriter?.writeArithmetic("add");
+      // pop pointer 1 to set THAT
+      // this.vmWriter?.writePop("pointer", 1);
     }
     await this.processSymbol("=");
     await this.compileExpression();
     await this.processSymbol(";");
-    if (varName) {
+    if (isSettingArrayElement) {
+      // result of expression will be at the top of the stack
+      // so pop it into temp first
+      this.vmWriter?.writePop("temp", 0);
+      // Change THAT to point to the index
+      // calculated for the left side of the let
+      this.vmWriter?.writePop("pointer", 1);
+      // Push the expression's value back onto the stack
+      this.vmWriter?.writePush("temp", 0);
+      // Set the value in the array
+      this.vmWriter?.writePop("that", 0);
+    } else if (varName) {
+      // pop varName
       this.writePopVariable(varName);
     }
   }
@@ -263,7 +307,11 @@ export class CompilationEngine {
    */
   async compileDo() {
     await this.processKeyword("do");
-    await this.processSubroutineCall();
+    const callDetails = await this.processSubroutineCall();
+    if (callDetails) {
+      const { calleeName, nArgs } = callDetails;
+      this.vmWriter?.writeCall(calleeName, nArgs);
+    }
     await this.processSymbol(";");
     this.vmWriter?.writePop("temp", 0);
   }
@@ -294,10 +342,10 @@ export class CompilationEngine {
       await this.compileTerm();
       switch (symbol) {
         case "+":
-          this.vmWriter?.writeArithmetic("add")
+          this.vmWriter?.writeArithmetic("add");
           break;
         case "-":
-          this.vmWriter?.writeArithmetic("sub")
+          this.vmWriter?.writeArithmetic("sub");
           break;
         case "*":
           this.vmWriter?.writeCall("Math.multiply", 2);
@@ -340,30 +388,15 @@ export class CompilationEngine {
     } else if (this.isStringConstant()) {
       const stringVal = await this.processStringConstant();
       if (typeof stringVal === "string") {
-        // Slide 78 for into
-        /*
-          push constant {length}
-          call String.new 1
-          pop pointer 0
-          # for each character
-            push constant c
-            call String.appendChar 1
-        */
+        // Slide 78
         this.vmWriter?.writePush("constant", stringVal.length);
         this.vmWriter?.writeCall("String.new", 1);
-        this.vmWriter?.writePop("pointer", 0);
         stringVal.split("").forEach((stringChar) => {
           this.vmWriter?.writePush("constant", stringChar.charCodeAt(0));
-          this.vmWriter?.writeCall("String.appendChar", 1);
+          this.vmWriter?.writeCall("String.appendChar", 2);
         });
       }
     } else if (this.isKeyword("true", "false", "null", "this")) {
-      /*
-        true = constant 1, followed by neg
-        false = constant 0
-        null = constant 0
-        this = pointer 0
-      */
       const keyword = await this.processKeyword(
         "true",
         "false",
@@ -405,15 +438,7 @@ export class CompilationEngine {
       const identifier = this.tokenizer?.identifier();
       await this.tokenizer?.advance();
       if (this.isSymbol("[")) {
-        // Handle array access with vm writer
-        /*
-          See Slide 63
-          push arr
-          push 2
-          add
-          pop pointer 1
-          push that 0
-        */
+        // Slide 63
         const arrayIdentifier = await this.processIdentifier(identifier);
         if (arrayIdentifier) {
           this.writePushVariable(arrayIdentifier);
@@ -540,18 +565,44 @@ export class CompilationEngine {
    */
   private async processSubroutineCall(
     subroutineName?: string
-  ): Promise<{ calleeName: string; nArgs: number } | void> {
+  ): Promise<{
+    calleeName: string;
+    nArgs: number;
+  } | void> {
     // There are two forms of a subroutine call:
     // - subroutineName(expressionList)
     // - classOrVarName.subroutineName(expressionList)
     let calleeName = await this.processIdentifier(subroutineName); // subroutineName or classOrVarName
+    let nArgs = 0;
     if (this.isSymbol(".")) {
+      // The qualifier is the identifier before the ".".
+      // At this point, it could be a class name or a field/local var.
+      const qualifier = calleeName;
       await this.processSymbol(".");
-      const name = await this.processIdentifier();
-      calleeName = calleeName ? `${calleeName}.${name}` : name;
+      const methodName = await this.processIdentifier();
+      const symbolEntry = qualifier && this.kindAndIndexOf(qualifier);
+      if (symbolEntry) {
+        // The qualifier was found in the symbol table, so it is an object.
+        // Pushing the object as the first argument.
+        this.writePushVariable(qualifier);
+        nArgs += 1;
+        // Prepending the object's class
+        calleeName = `${symbolEntry.type}.${methodName}`;
+        console.log(`calleeName = ${calleeName}`);
+      } else {
+        // At this point it is a class name, so just add the qualifier directly
+        calleeName = `${qualifier}.${methodName}`;
+      }
+    } else {
+      // No qualifier is present, so it is implicitly a call on 'this'
+      // Pushing 'this' as the first argument
+      this.vmWriter?.writePush("pointer", 0);
+      nArgs += 1;
+      // Also need to make sure to prepend the current class name
+      calleeName = calleeName && `${this.className}.${calleeName}`;
     }
     await this.processSymbol("(");
-    const nArgs = await this.compileExpressionList();
+    nArgs += await this.compileExpressionList();
     await this.processSymbol(")");
     if (calleeName) {
       return {
@@ -559,6 +610,7 @@ export class CompilationEngine {
         nArgs,
       };
     }
+    // TODO Consider just writing the vm code for the function call here
   }
 
   /**
@@ -642,26 +694,39 @@ export class CompilationEngine {
     }
   }
 
+  // TODO Find a better name since it also has type
   private kindAndIndexOf(
     identifier: string
-  ): { kind: Kind; index: number; scope: "subroutine" | "class" } | undefined {
+  ): { kind: Kind; index: number; type: string; scope: "subroutine" | "class" } | undefined {
     let kind = this.subroutineSymbolTable.kindOf(identifier);
     let index = this.subroutineSymbolTable.indexOf(identifier);
-    if ((kind === "local" || kind === "argument") && typeof index === "number") {
+    let typeVal = this.subroutineSymbolTable.typeOf(identifier);
+    if (
+      (kind === "local" || kind === "argument") &&
+      typeof index === "number" &&
+      typeof typeVal === "string"
+    ) {
       return {
         kind,
         index,
-        scope: "subroutine"
+        type: typeVal,
+        scope: "subroutine",
       };
     } else {
       // Looking up via class symbol table
       kind = this.classSymbolTable.kindOf(identifier);
       index = this.classSymbolTable.indexOf(identifier);
-      if ((kind === "static" || kind === "field") && typeof index === "number") {
+      typeVal = this.classSymbolTable.typeOf(identifier);
+      if (
+        (kind === "static" || kind === "field") &&
+        typeof index === "number" &&
+        typeof typeVal === "string"
+      ) {
         return {
           kind,
           index,
-          scope: "class"
+          type: typeVal,
+          scope: "class",
         };
       }
     }

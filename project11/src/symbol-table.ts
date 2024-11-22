@@ -24,7 +24,7 @@ export class SymbolTable {
   private argCount = 0;
   private localCount = 0;
 
-  private entries: SymbolTableEntry[] = [];
+  public entries: SymbolTableEntry[] = [];
 
   /**
    * Empties the symbol table, and resets the four indexes to 0.
