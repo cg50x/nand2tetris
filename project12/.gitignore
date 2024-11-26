@@ -174,12 +174,4 @@ dist
 # Finder (MacOS) folder config
 .DS_Store
 
-# Ignore all files pushed into the tests
-tests/ArrayTest/Array.jack
-tests/KeyboardTest/Keyboard.jack
-tests/MathTest/Math.jack
-tests/MemoryTest/Memory.jack
-tests/OutputTest/Output.jack
-tests/ScreenTest/Screen.jack
-tests/StringTest/String.jack
-tests/SysTest/Sys.jack
+*.vm
