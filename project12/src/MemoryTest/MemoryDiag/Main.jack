@@ -129,6 +129,7 @@ class Main {
         let out[0] = 73;
         let a = Memory.alloc(7000);
 
+
         let out[0] = 74;
         do Main.checkRange(a, 7000);
 
