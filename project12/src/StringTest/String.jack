@@ -11,54 +11,136 @@
  * string-oriented operations.
  */
 class String {
-
+    field Array str;
+    field int length;
+    field int max;
     /** constructs a new empty string with a maximum length of maxLength
      *  and initial length of 0. */
     constructor String new(int maxLength) {
+        if (maxLength = 0) {
+            let str = Array.new(1);
+        } else {
+            let str = Array.new(maxLength);
+        }
+        let length = 0;
+        let max = maxLength;
+        return this;
     }
 
     /** Disposes this string. */
     method void dispose() {
+        do str.dispose();
+        return;
     }
 
     /** Returns the current length of this string. */
     method int length() {
+        return length;
     }
 
     /** Returns the character at the j-th location of this string. */
     method char charAt(int j) {
+        return str[j];
     }
 
     /** Sets the character at the j-th location of this string to c. */
     method void setCharAt(int j, char c) {
+        let str[j] = c;
+        return;
     }
 
     /** Appends c to this string's end and returns this string. */
     method String appendChar(char c) {
+        if (length < max) {
+            let str[length] = c;
+            let length = length + 1;    
+        }
+        return this;
     }
 
     /** Erases the last character from this string. */
     method void eraseLastChar() {
+        if (length > 0) {
+            let length = length - 1;
+        }
+        return;
     }
 
     /** Returns the integer value of this string, 
      *  until a non-digit character is detected. */
     method int intValue() {
+        // 0 = 48
+        // 9 = 57
+        // keep track of currentIndex = 0
+        // keep track of intResult = 0
+        // while currentIndex is less than length and currentChar is a number,
+        //. intResult = intResult * 10 + currentChar as a number
+        // return intResult
+        var int currentIndex, intResult;
+        var char currentChar;
+        var boolean isNegative;
+        let currentIndex = 0;
+        let intResult = 0;
+        let currentChar = str[currentIndex];
+        let isNegative = currentChar = 45;
+        if (isNegative) {
+            let currentChar = currentChar + 1;
+        }
+        while ((currentIndex < length) & (currentChar > 47) & (currentChar < 58)) {
+            let intResult = intResult * 10 + (currentChar - 48);
+            let currentIndex = currentIndex + 1;
+            let currentChar = str[currentIndex];
+        }
+        if (isNegative) {
+            let intResult = -1 * intResult;
+        }
+        return intResult;
     }
 
     /** Sets this string to hold a representation of the given value. */
     method void setInt(int val) {
+        var String strVal, result, i;
+        if (val < 0) {
+            let result = "-";
+            let strVal = String.int2String(-1 * val);
+        } else {
+            let result = "";
+            let strVal = String.int2String(val);
+        }
+        let i = 0;
+        while (i < strVal.length()) {
+            do result.appendChar(strVal.charAt(i));
+        }
+        return result;
+    }
+
+    function String int2String(int val) {
+        var int lastDigit;
+        var String strResult;
+        if (val < 10) {
+            let strResult = String.new(1);
+            do strResult.setCharAt(0, val + 48);
+            return strResult;
+        } else {
+            let lastDigit = val - (val / 10);
+            let strResult = String.int2String(val / 10);
+            do strResult.appendChar(lastDigit + 48);
+            return strResult;
+        }
     }
 
     /** Returns the new line character. */
     function char newLine() {
+        return 128;
     }
 
     /** Returns the backspace character. */
     function char backSpace() {
+        return 129;
     }
 
     /** Returns the double quote (") character. */
     function char doubleQuote() {
+        return 34;
     }
 }
